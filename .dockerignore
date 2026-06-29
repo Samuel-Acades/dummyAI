@@ -2,7 +2,11 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 .git/
 .gitignore
 .env
 chroma_db/
+hf_cache/
+*.log
+*.tmp

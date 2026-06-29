@@ -1,15 +1,21 @@
 import os
 import sys
+import warnings
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from google import genai
 from sentence_transformers import SentenceTransformer
 import chromadb
 from pypdf import PdfReader
 from docx import Document
 
+from app.config import get_runtime_settings
+
+warnings.filterwarnings("ignore", message="ARC4 has been moved to cryptography.hazmat.decrepit")
+
 app = FastAPI(title="🌱 Kobiri AI Production Backend", version="1.0.0")
+settings = get_runtime_settings()
 
 # 1. Initialize Global API Gateways
 api_key = os.getenv("GEMINI_API_KEY")
@@ -25,11 +31,11 @@ embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 print("🗄️ Initializing Local Vector Database (ChromaDB)...")
 # Stores data persistently in a local folder named 'chroma_db'
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
+chroma_client = chromadb.PersistentClient(path=settings["chroma_db_path"])
 collection = chroma_client.get_or_create_collection(name="kobiri_agricultural_policy")
 
 # 3. Data Ingestion & Extraction Engine
-DATA_DIR = "./data"
+DATA_DIR = settings["data_dir"]
 
 def populate_vector_db():
     if collection.count() > 0:

@@ -9,14 +9,13 @@ RUN apt-get update && apt-get install -y \
 
 COPY ./requirements.txt /code/requirements.txt
 
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir --default-timeout=100 --retries 5 -r /code/requirements.txt
 
 # Pre-download the embedding model into the container image so it boots instantly
-RUN python -c "from sentence_transformers import SentenceTransformer; Model = SentenceTransformer('all-MiniLM-L6-v2')"
-
-COPY ./data /code/data
+# (removed to speed up builds; model is cached via ./hf_cache volume at runtime)
 COPY ./app /code/app
 
-EXPOSE 8000
+EXPOSE 8001
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001}"]
