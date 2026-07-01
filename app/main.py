@@ -132,16 +132,18 @@ async def handle_kobiri_chat(payload: ChatPayload):
         query_vector = embedding_model.encode(payload.message).tolist()
         
         # Step B: Instantly query local ChromaDB vector store
-        results = collection.query(query_embeddings=[query_vector], n_results=15)
+        results = collection.query(query_embeddings=[query_vector], n_results=10)
         
         # Combine text elements
-        retrieved_documents = results.get("documents", [[]])[0]
-        if not retrieved_documents or all(not (doc or "").strip() for doc in retrieved_documents):
-            raise HTTPException(
-                status_code=404,
-                detail="No relevant policy context was found for this query. Please ask a more specific question within Malawi agricultural policy."
+        retrieved_documents = [doc.strip() for doc in results.get("documents", [[]])[0] if (doc or "").strip()]
+        relevant_context = "\n\n".join(retrieved_documents[:5])
+        if not relevant_context:
+            print(f"⚠️ Weak retrieval for query; returned {len(retrieved_documents)} documents. Falling back to polite low-confidence guidance.")
+            contextual_notice = (
+                "I could not find strong indexed policy content for this query. Answer honestly in a calm and polite tone, and explain that you do not have enough policy text to respond confidently."
             )
-        relevant_context = "\n\n".join(retrieved_documents)
+        else:
+            contextual_notice = ""
 
         # Step C: Format production dynamic instructions
         dynamic_guidance = (
@@ -150,15 +152,17 @@ async def handle_kobiri_chat(payload: ChatPayload):
 
             CRITICAL LANGUAGE RULES:
             1. Detect the language used by the user in their query.
-            2. If the user asks a question in Chichewa, you MUST reply entirely in clear, natural Chichewa (e.g., if they ask about 'fetereza', explain the policy guidelines in Chichewa).
+            2. If the user asks a question in Chichewa, you MUST reply entirely in clear, natural Chichewa.
             3. If the user asks a question in English, you MUST reply entirely in English.
-            4. Always ground your responses strictly in the provided structural context from the policy documents. If the context does not contain the answer, politely state that you do not know in the matching language.
+            4. Answer in a helpful, respectful tone and avoid exposing file names or source metadata.
+            5. Use only the provided context when it is available. If the context is not sufficient, say you cannot answer confidently based on the current policy text.
             """
             "following semantically matched technical document context:\n\n"
             f"=== START DOCUMENT CONTEXT ===\n{relevant_context}\n=== END DOCUMENT CONTEXT ===\n\n"
+            f"{contextual_notice}\n"
             "Rules:\n"
             "1. Only use facts directly mentioned in the document context above.\n"
-            "2. If the context doesn't contain the answer, politely tell the user what parts of agricultural policy you can discuss.\n"
+            "2. If the context doesn't contain the answer, politely say you cannot answer confidently from the current policy text.\n"
             "3. Respond naturally and politely in the language used by the user (English or Chichewa)."
         )
 
