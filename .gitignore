@@ -1,5 +1,7 @@
 # ChromaDB Vector Database
 chroma_db/
+hf_cache/
+.piptmp/
 
 # Python
 __pycache__/
@@ -53,3 +55,4 @@ htmlcov/
 
 # Docker
 docker-compose.override.yaml
+tests/

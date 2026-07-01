@@ -8,5 +8,7 @@ __pycache__/
 .env
 chroma_db/
 hf_cache/
+data/
+tests/
 *.log
 *.tmp

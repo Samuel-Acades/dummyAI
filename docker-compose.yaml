@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   kobiri-ai:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: kobiri-ai-service
+    container_name: kobiri
     ports:
-      - "8001:8001"
+      - "8003:8001"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - PORT=8001
