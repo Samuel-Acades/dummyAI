@@ -46,8 +46,7 @@ def populate_vector_db():
     chunks = []
     
     if not os.path.exists(DATA_DIR):
-        print(f"⚠️ Warning: Data directory '{DATA_DIR}' not found.")
-        return
+        raise RuntimeError(f"Data directory '{DATA_DIR}' not found. Kobiri AI requires policy source files in this directory.")
 
     for file_name in os.listdir(DATA_DIR):
         file_path = os.path.join(DATA_DIR, file_name)
@@ -63,7 +62,7 @@ def populate_vector_db():
                     if len(c) > 100: 
                         chunks.append((f"{file_name}_chunk_{i}", c, {"source": file_name}))
             except Exception as e:
-                print(f"Error reading PDF {file_name}: {str(e)}")
+                raise RuntimeError(f"Error reading PDF {file_name}: {str(e)}")
                 
         elif ext == ".docx":
             try:
@@ -74,7 +73,7 @@ def populate_vector_db():
                     if len(c) > 100: 
                         chunks.append((f"{file_name}_chunk_{i}", c, {"source": file_name}))
             except Exception as e:
-                print(f"Error reading Docx {file_name}: {str(e)}")
+                raise RuntimeError(f"Error reading Docx {file_name}: {str(e)}")
                 
         elif ext == ".jsonl":
             try:
@@ -83,28 +82,34 @@ def populate_vector_db():
                         if line.strip():
                             chunks.append((f"{file_name}_line_{idx}", line.strip(), {"source": file_name}))
             except Exception as e:
-                print(f"Error reading JSONL {file_name}: {str(e)}")
+                raise RuntimeError(f"Error reading JSONL {file_name}: {str(e)}")
 
-    if chunks:
-        print(f"🧬 Vectorizing and uploading {len(chunks)} structural context blocks into ChromaDB...")
+    if not chunks:
+        raise RuntimeError(
+            f"No valid policy document content was found in '{DATA_DIR}'. "
+            "Please add supported files (.pdf, .docx, .jsonl) and restart the service."
+        )
+
+    print(f"🧬 Vectorizing and uploading {len(chunks)} structural context blocks into ChromaDB...")
         
-        # Process in chunks of 100 to save RAM and avoid timeouts
-        batch_size = 100
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i+batch_size]
-            
-            ids = [item[0] for item in batch]
-            documents = [item[1] for item in batch]
-            metadatas = [item[2] for item in batch]
-            
-            # Generate mathematical embeddings on CPU
-            embeddings = embedding_model.encode(documents, show_progress_bar=False).tolist()
-            
-            # Insert batch into database
-            collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
-            print(f"📦 Indexed batch {i // batch_size + 1} / {(len(chunks) + batch_size - 1) // batch_size}")
-            
-        print("✅ Vector database ingestion run completed successfully!")
+    # Process in chunks of 100 to save RAM and avoid timeouts
+    batch_size = 100
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i+batch_size]
+        
+        ids = [item[0] for item in batch]
+        documents = [item[1] for item in batch]
+        metadatas = [item[2] for item in batch]
+        
+        # Generate mathematical embeddings on CPU
+        embeddings = embedding_model.encode(documents, show_progress_bar=False).tolist()
+        
+        # Insert batch into database
+        collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+        print(f"📦 Indexed batch {i // batch_size + 1} / {(len(chunks) + batch_size - 1) // batch_size}")
+        
+    print("✅ Vector database ingestion run completed successfully!")
+    print(f"🔎 Current ChromaDB vector count: {collection.count()}")
 
 @app.on_event("startup")
 def startup_event():
@@ -131,7 +136,12 @@ async def handle_kobiri_chat(payload: ChatPayload):
         
         # Combine text elements
         retrieved_documents = results.get("documents", [[]])[0]
-        relevant_context = "\n\n".join(retrieved_documents) if retrieved_documents else "No direct matching policy references found."
+        if not retrieved_documents or all(not (doc or "").strip() for doc in retrieved_documents):
+            raise HTTPException(
+                status_code=404,
+                detail="No relevant policy context was found for this query. Please ask a more specific question within Malawi agricultural policy."
+            )
+        relevant_context = "\n\n".join(retrieved_documents)
 
         # Step C: Format production dynamic instructions
         dynamic_guidance = (
